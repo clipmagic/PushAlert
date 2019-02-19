@@ -1,0 +1,894 @@
+<?php namespace ProcessWire;
+
+
+/**
+ * PushAlert API for ProcessWire
+ * This module enables you to send and manage push notifications from your ProcessWire 3.0+ website.
+ *
+ * @author Clip Magic
+ *
+ * ProcessWire 3.x
+ * Copyright (C) 2011 by Ryan Cramer
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ *
+ * http://www.processwire.com
+ * http://www.ryancramer.com
+ *
+ */
+
+
+
+
+class PushAlert extends WireData implements Module, ConfigurableModule
+{
+    /**
+     *
+     */
+    const PA = 'pushalert';
+
+    /**
+     * @var array
+     *
+     */
+    protected $data = array(
+        'message_title',
+        'message_body',
+        'message_url',
+        'send_on_publish',
+        'message_id',
+        'result_json'
+    );
+
+
+
+    /**
+     * @return array
+     */
+    public static function getModuleInfo()
+    {
+        return array(
+            'title' => __("PushAlert for ProcessWire"),
+            'version' => "0.0.3",
+            'summary' => __("This module enables you to send and manage push notifications from your ProcessWire 3.0.74+ website."),
+            'author' => "Clip Magic",
+            'href' => "https://www.clipmagic.com.au",
+            'requires' => array("PHP>=5.6.0", "ProcessWire>=3.0.74"),
+            'installs' => array("FieldtypePushAlert"),
+            'autoload' => true,
+            'permission' => self::PA
+        );
+    }
+
+    /**
+     * @return array
+     */
+    static public function getDefaultConfig()
+    {
+        return array(
+            "api_key"          => "",
+            "web_id"           => "",
+            "api_url"          => "https://api.pushalert.co/rest/v1/",
+        );
+    }
+
+    /**
+     * Populate default configuration (will be overwritten after constructor with user's own configuration)
+     *
+     */
+    public function ___construct() {
+        foreach(self::getDefaultConfig() as $key => $value) {
+            $this->$key = $value;
+        }
+    }
+
+    /**
+     *
+     */
+    public function ___init()
+    {
+
+    }
+
+    /**
+     *
+     */
+    public function ___install()
+    {
+        //we create the permission pushalert to limit access to the module
+        $permission = $this->permissions->get("name=" . self::PA);
+        if (!$permission instanceof Permission) {
+            $p = new Permission();
+            $p->name = 'pushalert';
+            $p->title = $this->_('Send PushAlert notifications');
+            $p->save();
+
+            // tell the user we created this module's permission
+            $this->message("Created New Permission: pushalert");
+
+        }
+
+        // Create the required templates and pages
+
+        // Parent page for subscriptions
+        /** @var Pages $pages */
+        $pages = $this->wire('pages');
+        $fields = $this->wire('fields');
+        $templates = $this->wire('templates');
+
+
+        $paEndpointTpl = $templates->get('name=pushalert_endpoint');
+        if (!$paEndpointTpl instanceof Template) {
+            // new fieldgroup for front end endpoint
+            $fg = new Fieldgroup();
+            $fg->name = 'pushalert_endpoint';
+
+            // title field
+            $field = $fields->get("name=title");
+            $field->label = _("PushAlert API Endpoint");
+            $fg->add($field);
+            $fg->save();
+
+            // new template using the fieldgroup
+            // This template is used purely as and endpoint for the PushAlert JS API to collect subscription data
+            $t = new Template();
+            $t->name = 'pushalert_endpoint';
+            $t->noParents = 1; // allow only one page to be created which will happen below
+            $t->noPrependTemplateFile = 1; // dont prepend template file
+            $t->noAppendTemplateFile = 1; // dont append template file
+            $t->https = 1; // must always be https
+            $t->fieldgroup = $fg; // add the fieldgroup
+            $t->save();
+        }
+
+        $endpointPage = $pages->get("name=pushalert-endpoint");
+        if ($endpointPage instanceof NullPage) {
+            // Create the front end Endpoint page
+            $p = new Page();
+            $p->of(false);
+            $p->name = 'pushalert-endpoint';
+            $p->template = 'pushalert_endpoint';
+            $p->parent = $pages->get(1);
+            $p->title = _('PushAlert JS API Endpoint');
+            $p->status = Page::statusHidden;
+            $pages->save($p);
+        }
+
+
+        /**************************************/
+        // new fieldgroup for subscription pages
+        $fg = new Fieldgroup();
+        $fg->name = 'pushalert_subscription';
+        $fg->save();
+
+        $field = $fields->get("name=title");
+        $field->label = _("Subscriber Id");
+        $fg->add($field);
+
+        // ProcessWire user id
+        $papwuid = $fields->get('name=pushalert_user_id');
+        if (!$papwuid instanceof Field) {
+            $field = new Field();
+            $field->name = 'pushalert_user_id';
+            $field->label = _("PushAlert PW User ID");
+            $field->type = 'integer';
+//            $field->flags = Field::flagSystem; // set it as a system field (needs overriding prior to deleting in uninstall)
+            $field->save();
+            $fg->add($field);
+
+            $fg->save();
+        }
+
+        $pushAlertSubscriptionTpl = $templates->get("name=pushalert_subscription");
+        if (!$pushAlertSubscriptionTpl instanceof Template) {
+            // new template using the fieldgroup
+            $t = new Template();
+            $t->name = 'pushalert_subscription';
+            $t->fieldgroup = $fg; // add the fieldgroup
+            $t->noParents = 0;
+            $t->noChildren = 1; // no children allowed
+            $t->noPrependTemplateFile = 1; // dont prepend template file
+            $t->noAppendTemplateFile = 1; // dont append template file
+            $t->save();
+        }
+/*        $adminRoot = $pages->get("name=pushalert-endpoint");
+//        $page = $adminRoot->child("name=pushalert_subscriptions, template=pushalert_subscriptions, include=all");
+
+        if(!$page->id) {
+            $page = $pages->newPage(array('template' => 'pushalert_subscription'));
+            $page->parent = $adminRoot;
+            $page->status = Page::statusHidden | Page::statusLocked | Page::statusSystemID;
+            $page->name = 'pushalert_subscriptions';
+            $page->name = 'pushalert_subscriptions';
+            $page->title = 'PushAlert Subscriptions';
+            $page->sort = $adminRoot->numChildren;
+            $page->save();
+            $this->message("Added page {$page->path}", Notice::debug);
+        }
+
+        $configData = array('pushAlertSubscriptionsRootPageID' => $page->id);
+        $this->wire('modules')->saveModuleConfigData($this, $configData);
+
+*/
+        // copy the endpoint template file to site/templates directory
+        $copyFrom = dirname(__FILE__) . '/templates/';  // source of the template files to copy over [this is 'PushAlert/templates/']
+        $copyTo = wire('config')->paths->templates;// destination: '/site/templates/'
+
+            if(!is_file($copyTo . "pushalert_endpoint.php"))
+                $this->wire('files')->copy($copyFrom, $copyTo);
+    }
+
+
+    /**
+     * @param array $data
+     * @return InputfieldWrapper
+     * @throws WirePermissionException
+     */
+    public function getModuleConfigInputfields(array $data)
+    {
+
+        $fields = $this->wire('fields');
+        $templates = $this->wire('templates');
+
+        $inputfields = new InputfieldWrapper();
+
+        $defaults = self::getDefaultConfig();
+        $data = array_merge($defaults, $data);
+
+        $f = $this->modules->get('InputfieldText');
+        $f->name = 'api_key';
+        $f->label = __('PushAlert API key');
+        $f->value = $data['api_key'];
+        $f->collapsed = 5 ; // collapsedPopulated
+        $inputfields->add($f);
+
+        $f = $this->modules->get('InputfieldText');
+        $f->name = 'web_id';
+        $f->label = __('PushAlert Web Id');
+        $f->collapsed = 5 ; // collapsedPopulated
+        $f->value = $data['web_id'];
+        $inputfields->add($f);
+
+        $f = $this->modules->get('InputfieldText');
+        $f->name = 'api_url';
+        $f->label = __('PushAlert API Base URL');
+        $f->collapsed = 5 ; // collapsedPopulated
+        $f->value = $data['api_url'];
+        $inputfields->add($f);
+
+        return $inputfields;
+
+    }
+
+
+    /**
+     *
+     */
+    public function ready()
+    {
+        $this->addHookAfter('Pages::published', $this, 'hookPagesPublished');
+        $this->addHookAfter('Page::loaded', $this, 'hookResultJson');
+        $this->addHookAfter('Page::render', $this, 'hookPushAlertJS');
+        $this->addHookBefore('Pages::saveReady', function(HookEvent $event) {
+            // Get the object the event occurred on, if needed
+            $pages = $event->object;
+
+            // Get values of arguments sent to hook (and optionally modify them)
+            $page = $event->arguments(0);
+
+            $pageField = $page->fields->get('type=FieldtypePushAlert'); // should only ever be one per page
+            if(!$pageField instanceof Field) return;
+
+            $paFieldTypeConfig = wire('modules')->get('FieldtypePushAlert')->getDefaultFields();
+            $input = wire('input');
+
+            $paFields = array();
+            foreach ($paFieldTypeConfig as $key => $value) {
+                $paFields[$value] = $input->post[$value];
+            }
+            $input->post[$pageField->name] = json_encode($paFields);
+
+            // remove unnecessary input data to prevent database errors
+            unset($input->post['pa_message_title']);
+            unset($input->post['pa_message_body']);
+            unset($input->post['pa_message_url']);
+            unset($input->post['pa_message_id']);
+            unset($input->post['pa_send_on_publish']);
+            unset($input->post['pa_result_json']);
+        });
+    }
+
+    /*
+     * Hooks
+     */
+
+    public function hookPushAlertJS (HookEvent $event) {
+        $page = $event->object;
+        if (!$page->template->get("name") == 'admin') return;  // front end only
+        if (!$page->fields->get("type=FieldtypePushAlert")) return;  // pushalert field pages only
+
+        $return = $event->return;
+
+        if(empty($this->web_id)) return;
+
+        $javascript = '
+            <script>
+                function callbackOnSuccess(result) {                    
+                    let topw = {};
+                    topw.subscriber_id = result.subscriber_id;
+                    topw.alreadySubscribed = result.alreadySubscribed;            
+                    var json = JSON.stringify(topw);
+                    return fetch("' . $this->wire("pages")->get("name=pushalert-endpoint")->httpUrl . '", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: json
+                    });
+                }
+                </script>
+                <!-- PushAlert -->
+                <script>					
+                (function(d, t) {
+                    var g = d.createElement(t),
+                    s = d.getElementsByTagName(t)[0];
+                    g.src = "https://cdn.pushalert.co/integrate_'.$this->web_id.'.js";
+                    s.parentNode.insertBefore(g, s);
+                }(document, "script"));
+                (pushalertbyiw = window.pushalertbyiw || []).push(["onSuccess", callbackOnSuccess])
+            </script>
+            <!-- End PushAlert -->
+		';
+        // inject inline script into head
+        $event->return = str_ireplace("</head>", $javascript.'</head>', $return);
+    }
+
+
+    /**
+     * @param HookEvent $event
+     * @throws WireException
+     * @throws WirePermissionException
+     */
+    public function hookPagesPublished(HookEvent $event) {
+        // Modified page, already contains changes in memory, not yet in DB
+        $page = $event->arguments('page');
+        $return = $event->return;
+
+        // SANITY CHECKS
+        // Check template has the PushAlert field
+        $widgetFld = $page->fields->get('type=FieldtypePushAlert');
+
+        if (!$widgetFld instanceof Field) return; // no pushalert field on the page
+
+        // Quietly save the page so the PushAlert data is stored in the database
+        $this->wire('pages')->save($page);
+
+        // Retrieve the field data from the database
+        $widget = (object) $this->getFieldData($page, $widgetFld);
+
+        if (empty($widget)) return;
+
+        // Ensure all the other PushAlert fields and their correct names exist on the template and aren't empty on the page
+        $paTitle     = $widget->pa_message_title;
+        $paMessage   = $widget->pa_message_body;
+        $paUrl       = $widget->pa_message_url;
+        if (empty($paUrl))
+            $paUrl = $page->httpUrl;
+        $paSend      = (int) $widget->pa_send_on_publish;
+
+
+        // Hrmmm, may remove this field after sending to prevent spamming?
+        if ($paSend != 1) return; // json decoded has it as a string so cast as int
+
+        // Sanity checks on message title field
+        if (empty($paTitle)) {
+            throw new WireException(_("PushAlert message needs a title"));
+        }
+        // Sanity checks on message body field
+        if (empty($paMessage)) {
+            throw new WireException(_("PushAlert needs message content"));
+        }
+
+        // SANITY CHECKS COMPLETE, now do stuff...
+
+        $options = array(
+            'title'   => $paTitle,
+            'message' => $paMessage,
+            'url'     => $paUrl
+        );
+
+        $result = $this->send($options);
+
+        if (!empty($result)) {
+            $resultObj = json_decode($result);
+
+            if ($resultObj->success) {
+                $widget->pa_message_id = $resultObj->id;
+                $widget->pa_send_on_publish = 0;
+
+                // Update the field data with the retrieved Message Id and turn off the Save on Publish checkbox
+                $dbUpdate = $this->_updateFieldData($page, $widgetFld, $widget);
+
+                $this->message(_("Notification sent with ID: $resultObj->id"));
+            } else {
+                $this->error(_("There was a problem sending the notification"));
+            }
+            if ($dbUpdate === false) { // problem updating db
+                $this->error(_("There was a problem updating the database"));
+            }
+        }
+        $event->return = $return;
+    }
+
+    /**
+     * @param HookEvent $event
+     * @throws WireException
+     * @throws WirePermissionException
+     */
+    public function hookResultJson (HookEvent $event) {
+
+        $page = $event->object;
+
+        // Only applicable in admin area in page edit mode
+        // ?????
+//        if ($page->template->get('name') != 'admin') return;
+
+        // Confirm the page has a FieldtypePushAlert field
+        $fields = $this->wire('fields');
+        $paFields = $fields->find('type=FieldtypePushAlert');
+        if (!$paFields->count) return;
+
+        $widgetFld = '';
+
+        foreach ($paFields as $item) {
+            if ($page->hasField($item->name)) {
+                $widgetFld = $fields->get("name=".$item->name);
+                break;
+            }
+        }
+
+        // No field of FieldtypePushAlert on the page/template
+        if (empty($widgetFld)) {
+            return;
+        };
+
+        // Get the data from the database, call PushAlert for latest stats and update the page data
+        $widget =  (object) $this->getFieldData($page, $widgetFld);
+
+        // Send the get request to PushAlert to retrieve the latest stats & repopulate the field database record
+        if (!empty($widget->pa_message_id)) {
+            $slug = "info/$widget->pa_message_id";
+            $result = $this->_getHttp($slug);
+            $resultObj = (json_decode($result));
+            if ($resultObj->success) {
+                $widget->pa_result_json = array(
+                    'attempted' => $resultObj->attemped,
+                    'delivered' => $resultObj->delivered,
+                    'clicked'   => $resultObj->clicked,
+                    'ctr'       => $resultObj->ctr
+                );
+                $this->_updateFieldData($page, $widgetFld, $widget);
+            }
+        }
+    }
+
+
+    // PDO stuff to save the field data as json
+
+    /**
+     * @param Page $page
+     * @param $widgetFld
+     * @param $widget
+     * @return bool|void
+     * @throws WireException
+     */
+    private function _updateFieldData (Page $page, $widgetFld, $widget) {
+        if (empty($widgetFld) || empty($widget)) return;
+
+        if (empty($widget->pa_message_title)) return;
+        $widget = $this->_cleanData($widget);
+
+        $widgetJson = json_encode($widget);
+        /* save directly to the database */
+        $database = $this->wire('database');
+        $q = "UPDATE field_$widgetFld->name SET data = '$widgetJson'  WHERE pages_id = $page->id";
+        $query = $database->prepare($q);
+        $result = $database->execute($query);
+        return $result;
+    }
+
+    // Sanitize the user input before saving to the database
+
+    /**
+     * @param $data
+     * @return array|void
+     * @throws WireException
+     */
+    private function _cleanData($data) {
+       if (!$data) return;
+       if (empty($data->pa_message_title)) return;
+
+        // sanitize the data first
+        $sanitizer = $this->wire('sanitizer');
+        /*
+         *  User input fields:
+            'pa_message_title',
+            'pa_message_body',
+            'pa_message_url',
+            'pa_message_id',
+            'pa_send_on_publish',
+            'pa_message_id',
+         */
+
+        $data->pa_message_title   = $sanitizer->text($data->pa_message_title);
+        $data->pa_message_body    = $sanitizer->text($data->pa_message_body);
+        if (!empty($data->pa_message_url))
+            $data->pa_message_url     = $sanitizer->url($data->pa_message_url);
+        $data->pa_message_id      = $sanitizer->text($data->pa_message_id);
+        $data->pa_send_on_publish = $sanitizer->int($data->pa_send_on_publish);
+
+        $array = get_object_vars($data);
+        return $array;
+    }
+
+    // Retrieve the saved field data from the database
+
+    /**
+     * @param Page $page
+     * @param $widgetFld
+     * @return array|string|void
+     * @throws WireException
+     */
+    public function getFieldData (Page $page, $widgetFld) {
+
+        $database = $this->wire('database');
+        $sql = "SELECT `data` FROM `field_$widgetFld->name` WHERE `pages_id` = \"$page->id\"";
+        $stmt = $database->prepare($sql);
+        $stmt->execute();
+        $result = $stmt->fetch();  // we only want one, not fetchAll()
+        $return = '';
+        if (!empty($result['data'])) {
+            $data = (object) json_decode($result['data']);
+            $return = $this->_cleanData($data);
+        }
+        return $return;
+    }
+
+    /**
+     * @param array $options
+     * @return bool|string
+     * @throws WireException
+     * @throws WirePermissionException
+     */
+
+    // Prepare the data to send to PushAlert to send the notification & determine send method based on PW version
+    /**
+     * @param array $options
+     * @return bool|string
+     * @throws WireException
+     * @throws WirePermissionException
+     */
+    public function send($options = array())
+    {
+        if (empty($options['title']))
+            throw new WireException ('Missing notification title');
+        if (empty($options['message']))
+            throw new WireException ('Missing notification message');
+        if (empty($options['url']))
+            $options['url'] = $this->wire('pages')->get('/')->httpUrl;
+        return $this->_send($options);
+    }
+
+    /**
+     * @param $options
+     * @return bool|string
+     * @throws WireException
+     */
+    private function _send($options)
+    {
+        $requiredOptions = array(
+            'title',
+            'message',
+            'url'
+        );
+        $otherOptions = array(
+            'icon',
+            'large_image',
+            'action1',
+            'action2',
+            'audience_id',
+            'subscriber',
+            'subscribers',
+            'title_attr',
+            'message_attr'
+        );
+        $allOptions = array_merge($requiredOptions, $otherOptions);
+        $sanitizer = $this->wire('sanitizer');
+
+        // Sanitize the options
+        if (count($options) > 0) {
+            foreach ($options as $option => $v) {
+                // remove any stupid options
+                if (!in_array($option, $allOptions)) {
+                    // Don't send stupid options
+                    unset($options[$option]);
+                    $this->wire('log')->error($option . __(" is not a valid option"));
+                    continue;
+                }
+
+                switch ($option) {
+                    case 'url':
+                        $options[$option] = $sanitizer->url($v); // sanitize as URL
+                        break;
+
+                    case 'audio':
+                        $options[$option] = $sanitizer->int($v); // sanitize as integer
+                        break;
+                    default:
+                        $options[$option] = $sanitizer->text($v); // sanitize as text string
+                        break;
+                }
+            }
+        }
+        // Prepare and send the request
+        $slug = "send";
+
+        if($this->wire('config')->version('3.0.124')) {
+            // ProcessWire version is 3.0.124 or newer
+            $result = $this->_sendHttp($slug, $options);
+        } else {
+            $result = $this->_sendCurl($slug, $options);
+        }
+        return $result;
+    }
+
+    /**
+     * @param $slug
+     * @param $options
+     * @return mixed
+     */
+    private function _sendHttp ($slug, $options) {
+        $http = new WireHttp();
+        $headers = Array();
+        $headers[] = "Authorization: api_key=". $this->api_key;
+        $http->setHeaders( $headers);
+        $result = $http->send($this->api_url . $slug, $options);
+        return $result;
+
+    }
+
+    /**
+     * @param $slug
+     * @param $options
+     * @return bool|string
+     */
+    private function _sendCurl ($slug, $options) {
+        $headers = Array();
+        $headers[] = "Authorization: api_key=" . $this->api_key;
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->api_url . $slug);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($options));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $result = curl_exec($ch);
+        return $result;
+    }
+
+    /**
+     * @param $options
+     * @return mixed
+     */
+
+    public function _getHttp ($slug, $options = array()) {
+        $http = new WireHttp();
+        $headers = Array();
+        $headers[] = "Authorization: api_key=". $this->api_key;
+        $http->setHeaders( $headers);
+        $result = $http->get($this->api_url . $slug, $options);
+        return $result;
+
+    }
+
+    /**
+     * @param $options
+     * @return bool|string
+     */
+    private function _getCurl ($slug, $options) {
+        $curlUrl = $this->api_url . "segments";
+
+        $headers = Array();
+        $headers[] = "Authorization: api_key=". $this->api_key;
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $curlUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+        $result = curl_exec($ch);
+        return $result;
+    }
+
+
+    /**
+     * @param array $options
+     * @return bool|mixed|string
+     * @throws WireException
+     */
+    public function getSegments( $options = array()) {
+//        $url = $this->api_url . 'segments';
+        if($this->wire('config')->version('3.0.124')) {
+            // ProcessWire version is 3.0.124 or newer
+            $result = $this->_getHttp('segments',$options);
+        } else {
+            $result = $this->_getCurl('segments', $options);
+        }
+        return $result;
+    }
+
+    /**
+     * @param Page $page
+     * @param Field $field
+     * @return string
+     */
+    public function getStats(Page $page, Field $field) {
+        $stats = $this->_getStats($page, $field);
+        return $stats;
+    }
+
+    /**
+     * @param Page $page
+     * @param Field $field
+     * @return string|void
+     * @throws WireException
+     */
+    private function _getStats(Page $page, Field $field) {
+        $out = '';
+
+//        if (!in_array($page->template, $this->includeTemplates)) return $out;
+        if (!$page->hasField($field->name)) return;
+        $widget = $this->getFieldData($page, $field);
+        if (empty($widget->message_id)) {
+            $out = "<p>" . _('Message not yet sent. No results') . "</p>";
+        } else {
+
+            // OK, we have a message id. Now get the stats
+            $slug = "info/" . $field->message_id;
+
+            $result = $this->_getHttp($slug);
+
+            if (!empty($result)) {
+                $resultObj = json_decode($result);
+                if ($resultObj->success) {
+                    $out .= "<ul>";
+                    $out .= "<li>" . _('Attempted') . ": " . $resultObj->attempted . "</li>";
+                    $out .= "<li>" . _('Delivered') . ": " . $resultObj->delivered . "</li>";
+                    $out .= "<li>" . _('Clicked')   . ": " . $resultObj->clicked   . "</li>";
+                    $out .= "<li>" . _('CTR')       . ": " . $resultObj->ctr       . "</li>";
+                    $out .= "</ul>";
+                }
+            }
+        }
+        return $out;
+    }
+
+
+    /**
+     *
+     */
+    public function ___uninstall()
+    {
+        //find and delete the pushalert permission and let the user know
+        $permission = $this->permissions->get(self::PA);
+        if ($permission->id){
+            $permission->delete();
+            $this->message("Deleted Permission:" . self::PA);
+        }
+
+        // Remove associated modules
+        $modules = $this->wire('modules');
+
+        // InputfieldPushAlert
+        if ($modules->isInstalled('InputfieldPushAlert')) {
+            $modules->uninstall('InputfieldPushAlert');
+        }
+
+        // FieldtypePushAlert
+        if ($modules->isInstalled('FieldtypePushAlert')) {
+            $templates = $this->wire('templates');
+            $fields = $this->wire('fields');
+
+            $paFields = $fields->find('type=FieldtypePushAlert');
+            if ($paFields->count) {
+                foreach ($paFields as $f) {
+                    $tpls = $f->getTemplates(); // get all the templates that have this fieldtype
+                    if ($tpls->count) {
+                        foreach ($tpls  as $t) {
+                            $fg = $t->fieldgroup;
+                            $fg->remove($f); // remove the field from the fieldgroup
+                            $fg->save();
+                            $t->save();      // save the updated template
+                        }
+                    }
+                    $fields->delete($f);
+                }
+            }
+            // by now, should be no FieldtypePushAlert fields
+            $modules->uninstall('FieldtypePushAlert');
+        }
+
+        // Delete the admin pages
+        $pages = $this->wire('pages');
+
+        if($this->className() != 'PushAlert') return;
+        $page = $pages->get("name=pushalert-endpoint");
+        if($page->id) {
+//            $page->addStatus(Page::statusSystemOverride);
+//            $page->removeStatus(Page::statusSystem);
+//            $page->removeStatus(Page::statusSystemID);
+//            $page->removeStatus(Page::statusSystemOverride);
+//            $page->removeStatus(Page::statusLocked);
+            $pages->delete($page, true);
+            $this->message("Removed page {$page->path}", Notice::debug);
+        }
+/*
+        // Delete the frontend API endpoint page
+        $endPointPage = $pages->get("name=pushalert-endpoint");
+        if($endPointPage->id) {
+            $page->addStatus(Page::statusSystemOverride);
+//            $page->removeStatus(Page::statusLocked);
+            $page->removeStatus(Page::statusHidden);
+
+            $pages->delete($endPointPage, true);
+            $this->message("Removed page {$endPointPage->path}", Notice::debug);
+        }
+*/
+        // Delete the templates
+        $templates = $this->wire('templates');
+
+        // Delete the api endpoint template
+        $endPointTpl = $templates->get("name=pushalert_endpoint");
+        if ($endPointTpl->id) {
+//            $endPointTpl->flags = Template::flagSystemOverride;
+//            $endPointTpl->flags = 0;
+            $templates->delete($endPointTpl);
+        }
+
+        // Delete the subscriptions template
+        $subscriptionTpl = $templates->get("name=pushalert_subscription");
+        if ($subscriptionTpl->id) {
+//            $subscriptionTpl->flags = Template::flagSystemOverride;
+//            $subscriptionTpl->flags = 0;
+            $templates->delete($subscriptionTpl);
+        }
+
+        // Double check the fieldgroups get deleted too
+        $fieldgroups = $this->wire('fieldgroups');
+
+        $subscriptionFg = $fieldgroups->get('pushalert_subscription');
+        if ($subscriptionFg->id) {
+            $subscriptionFg->removeFields();
+            $fieldgroups->delete($subscriptionFg);
+        }
+
+        $endPointFg = $fieldgroups->get('pushalert_endpoint');
+        if ($endPointFg->id) {
+            $endPointFg->removeFields();
+            $fieldgroups->delete($endPointFg);
+        }
+
+        // Delete the pushalert_user_id field
+        $pushAlerUserIdFld = $this->wire('fields')->get("name=pushalert_user_id");
+        if ($pushAlerUserIdFld instanceof Field) {
+
+            $fields->delete($pushAlerUserIdFld);
+        }
+
+        // Delete the endpoint template file - should never be customised
+        $templatePath = $this->wire('config')->paths->templates . "pushalert_endpoint.php";
+        if (is_file($templatePath))
+            $this->wire('files')->unlink($templatePath);
+    }
+
+
+}
