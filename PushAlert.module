@@ -39,227 +39,6 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         'result_json'
     );
 
-
-
-    /**
-     * @return array
-     */
-    public static function getModuleInfo()
-    {
-        return array(
-            'title' => __("PushAlert for ProcessWire"),
-            'version' => "0.0.3",
-            'summary' => __("This module enables you to send and manage push notifications from your ProcessWire 3.0.74+ website."),
-            'author' => "Clip Magic",
-            'href' => "https://www.clipmagic.com.au",
-            'requires' => array("PHP>=5.6.0", "ProcessWire>=3.0.74"),
-            'installs' => array("FieldtypePushAlert"),
-            'autoload' => true,
-            'permission' => self::PA
-        );
-    }
-
-    /**
-     * @return array
-     */
-    static public function getDefaultConfig()
-    {
-        return array(
-            "api_key"          => "",
-            "web_id"           => "",
-            "api_url"          => "https://api.pushalert.co/rest/v1/",
-        );
-    }
-
-    /**
-     * Populate default configuration (will be overwritten after constructor with user's own configuration)
-     *
-     */
-    public function ___construct() {
-        foreach(self::getDefaultConfig() as $key => $value) {
-            $this->$key = $value;
-        }
-    }
-
-    /**
-     *
-     */
-    public function ___init()
-    {
-
-    }
-
-    /**
-     *
-     */
-    public function ___install()
-    {
-        //we create the permission pushalert to limit access to the module
-        $permission = $this->permissions->get("name=" . self::PA);
-        if (!$permission instanceof Permission) {
-            $p = new Permission();
-            $p->name = 'pushalert';
-            $p->title = $this->_('Send PushAlert notifications');
-            $p->save();
-
-            // tell the user we created this module's permission
-            $this->message("Created New Permission: pushalert");
-
-        }
-
-        // Create the required templates and pages
-
-        // Parent page for subscriptions
-        /** @var Pages $pages */
-        $pages = $this->wire('pages');
-        $fields = $this->wire('fields');
-        $templates = $this->wire('templates');
-
-
-        $paEndpointTpl = $templates->get('name=pushalert_endpoint');
-        if (!$paEndpointTpl instanceof Template) {
-            // new fieldgroup for front end endpoint
-            $fg = new Fieldgroup();
-            $fg->name = 'pushalert_endpoint';
-
-            // title field
-            $field = $fields->get("name=title");
-            $field->label = _("PushAlert API Endpoint");
-            $fg->add($field);
-            $fg->save();
-
-            // new template using the fieldgroup
-            // This template is used purely as and endpoint for the PushAlert JS API to collect subscription data
-            $t = new Template();
-            $t->name = 'pushalert_endpoint';
-            $t->noParents = 1; // allow only one page to be created which will happen below
-            $t->noPrependTemplateFile = 1; // dont prepend template file
-            $t->noAppendTemplateFile = 1; // dont append template file
-            $t->https = 1; // must always be https
-            $t->fieldgroup = $fg; // add the fieldgroup
-            $t->save();
-        }
-
-        $endpointPage = $pages->get("name=pushalert-endpoint");
-        if ($endpointPage instanceof NullPage) {
-            // Create the front end Endpoint page
-            $p = new Page();
-            $p->of(false);
-            $p->name = 'pushalert-endpoint';
-            $p->template = 'pushalert_endpoint';
-            $p->parent = $pages->get(1);
-            $p->title = _('PushAlert JS API Endpoint');
-            $p->status = Page::statusHidden;
-            $pages->save($p);
-        }
-
-
-        /**************************************/
-        // new fieldgroup for subscription pages
-        $fg = new Fieldgroup();
-        $fg->name = 'pushalert_subscription';
-        $fg->save();
-
-        $field = $fields->get("name=title");
-        $field->label = _("Subscriber Id");
-        $fg->add($field);
-
-        // ProcessWire user id
-        $papwuid = $fields->get('name=pushalert_user_id');
-        if (!$papwuid instanceof Field) {
-            $field = new Field();
-            $field->name = 'pushalert_user_id';
-            $field->label = _("PushAlert PW User ID");
-            $field->type = 'integer';
-//            $field->flags = Field::flagSystem; // set it as a system field (needs overriding prior to deleting in uninstall)
-            $field->save();
-            $fg->add($field);
-
-            $fg->save();
-        }
-
-        $pushAlertSubscriptionTpl = $templates->get("name=pushalert_subscription");
-        if (!$pushAlertSubscriptionTpl instanceof Template) {
-            // new template using the fieldgroup
-            $t = new Template();
-            $t->name = 'pushalert_subscription';
-            $t->fieldgroup = $fg; // add the fieldgroup
-            $t->noParents = 0;
-            $t->noChildren = 1; // no children allowed
-            $t->noPrependTemplateFile = 1; // dont prepend template file
-            $t->noAppendTemplateFile = 1; // dont append template file
-            $t->save();
-        }
-/*        $adminRoot = $pages->get("name=pushalert-endpoint");
-//        $page = $adminRoot->child("name=pushalert_subscriptions, template=pushalert_subscriptions, include=all");
-
-        if(!$page->id) {
-            $page = $pages->newPage(array('template' => 'pushalert_subscription'));
-            $page->parent = $adminRoot;
-            $page->status = Page::statusHidden | Page::statusLocked | Page::statusSystemID;
-            $page->name = 'pushalert_subscriptions';
-            $page->name = 'pushalert_subscriptions';
-            $page->title = 'PushAlert Subscriptions';
-            $page->sort = $adminRoot->numChildren;
-            $page->save();
-            $this->message("Added page {$page->path}", Notice::debug);
-        }
-
-        $configData = array('pushAlertSubscriptionsRootPageID' => $page->id);
-        $this->wire('modules')->saveModuleConfigData($this, $configData);
-
-*/
-        // copy the endpoint template file to site/templates directory
-        $copyFrom = dirname(__FILE__) . '/templates/';  // source of the template files to copy over [this is 'PushAlert/templates/']
-        $copyTo = wire('config')->paths->templates;// destination: '/site/templates/'
-
-            if(!is_file($copyTo . "pushalert_endpoint.php"))
-                $this->wire('files')->copy($copyFrom, $copyTo);
-    }
-
-
-    /**
-     * @param array $data
-     * @return InputfieldWrapper
-     * @throws WirePermissionException
-     */
-    public function getModuleConfigInputfields(array $data)
-    {
-
-        $fields = $this->wire('fields');
-        $templates = $this->wire('templates');
-
-        $inputfields = new InputfieldWrapper();
-
-        $defaults = self::getDefaultConfig();
-        $data = array_merge($defaults, $data);
-
-        $f = $this->modules->get('InputfieldText');
-        $f->name = 'api_key';
-        $f->label = __('PushAlert API key');
-        $f->value = $data['api_key'];
-        $f->collapsed = 5 ; // collapsedPopulated
-        $inputfields->add($f);
-
-        $f = $this->modules->get('InputfieldText');
-        $f->name = 'web_id';
-        $f->label = __('PushAlert Web Id');
-        $f->collapsed = 5 ; // collapsedPopulated
-        $f->value = $data['web_id'];
-        $inputfields->add($f);
-
-        $f = $this->modules->get('InputfieldText');
-        $f->name = 'api_url';
-        $f->label = __('PushAlert API Base URL');
-        $f->collapsed = 5 ; // collapsedPopulated
-        $f->value = $data['api_url'];
-        $inputfields->add($f);
-
-        return $inputfields;
-
-    }
-
-
     /**
      *
      */
@@ -300,7 +79,6 @@ class PushAlert extends WireData implements Module, ConfigurableModule
     /*
      * Hooks
      */
-
     public function hookPushAlertJS (HookEvent $event) {
         $page = $event->object;
         if (!$page->template->get("name") == 'admin') return;  // front end only
@@ -341,7 +119,6 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         // inject inline script into head
         $event->return = str_ireplace("</head>", $javascript.'</head>', $return);
     }
-
 
     /**
      * @param HookEvent $event
@@ -471,9 +248,7 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         }
     }
 
-
     // PDO stuff to save the field data as json
-
     /**
      * @param Page $page
      * @param $widgetFld
@@ -497,7 +272,6 @@ class PushAlert extends WireData implements Module, ConfigurableModule
     }
 
     // Sanitize the user input before saving to the database
-
     /**
      * @param $data
      * @return array|void
@@ -709,7 +483,6 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         return $result;
     }
 
-
     /**
      * @param array $options
      * @return bool|mixed|string
@@ -772,6 +545,133 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         return $out;
     }
 
+    /**
+     *
+     */
+    public function ___install()
+    {
+        //we create the permission pushalert to limit access to the module
+        $permission = $this->permissions->get("name=" . self::PA);
+        if (!$permission instanceof Permission) {
+            $p = new Permission();
+            $p->name = 'pushalert';
+            $p->title = $this->_('Send PushAlert notifications');
+            $p->save();
+
+            // tell the user we created this module's permission
+            $this->message("Created New Permission: pushalert");
+
+        }
+
+        // Create the required templates and pages
+
+        // Parent page for subscriptions
+        /** @var Pages $pages */
+        $pages = $this->wire('pages');
+        $fields = $this->wire('fields');
+        $templates = $this->wire('templates');
+
+
+        $paEndpointTpl = $templates->get('name=pushalert_endpoint');
+        if (!$paEndpointTpl instanceof Template) {
+            // new fieldgroup for front end endpoint
+            $fg = new Fieldgroup();
+            $fg->name = 'pushalert_endpoint';
+
+            // title field
+            $field = $fields->get("name=title");
+            $field->label = _("PushAlert API Endpoint");
+            $fg->add($field);
+            $fg->save();
+
+            // new template using the fieldgroup
+            // This template is used purely as and endpoint for the PushAlert JS API to collect subscription data
+            $t = new Template();
+            $t->name = 'pushalert_endpoint';
+            $t->noParents = 1; // allow only one page to be created which will happen below
+            $t->noPrependTemplateFile = 1; // dont prepend template file
+            $t->noAppendTemplateFile = 1; // dont append template file
+            $t->https = 1; // must always be https
+            $t->fieldgroup = $fg; // add the fieldgroup
+            $t->save();
+        }
+
+        $endpointPage = $pages->get("name=pushalert-endpoint");
+        if ($endpointPage instanceof NullPage) {
+            // Create the front end Endpoint page
+            $p = new Page();
+            $p->of(false);
+            $p->name = 'pushalert-endpoint';
+            $p->template = 'pushalert_endpoint';
+            $p->parent = $pages->get(1);
+            $p->title = _('PushAlert JS API Endpoint');
+            $p->status = Page::statusHidden;
+            $pages->save($p);
+        }
+
+
+        /**************************************/
+        // new fieldgroup for subscription pages
+        $fg = new Fieldgroup();
+        $fg->name = 'pushalert_subscription';
+        $fg->save();
+
+        $field = $fields->get("name=title");
+        $field->label = _("Subscriber Id");
+        $fg->add($field);
+
+        // ProcessWire user id
+        $papwuid = $fields->get('name=pushalert_user_id');
+        if (!$papwuid instanceof Field) {
+            $field = new Field();
+            $field->name = 'pushalert_user_id';
+            $field->label = _("PushAlert PW User ID");
+            $field->type = 'integer';
+//            $field->flags = Field::flagSystem; // set it as a system field (needs overriding prior to deleting in uninstall)
+            $field->save();
+            $fg->add($field);
+
+            $fg->save();
+        }
+
+        $pushAlertSubscriptionTpl = $templates->get("name=pushalert_subscription");
+        if (!$pushAlertSubscriptionTpl instanceof Template) {
+            // new template using the fieldgroup
+            $t = new Template();
+            $t->name = 'pushalert_subscription';
+            $t->fieldgroup = $fg; // add the fieldgroup
+            $t->noParents = 0;
+            $t->noChildren = 1; // no children allowed
+            $t->noPrependTemplateFile = 1; // dont prepend template file
+            $t->noAppendTemplateFile = 1; // dont append template file
+            $t->save();
+        }
+        /*        $adminRoot = $pages->get("name=pushalert-endpoint");
+        //        $page = $adminRoot->child("name=pushalert_subscriptions, template=pushalert_subscriptions, include=all");
+
+                if(!$page->id) {
+                    $page = $pages->newPage(array('template' => 'pushalert_subscription'));
+                    $page->parent = $adminRoot;
+                    $page->status = Page::statusHidden | Page::statusLocked | Page::statusSystemID;
+                    $page->name = 'pushalert_subscriptions';
+                    $page->name = 'pushalert_subscriptions';
+                    $page->title = 'PushAlert Subscriptions';
+                    $page->sort = $adminRoot->numChildren;
+                    $page->save();
+                    $this->message("Added page {$page->path}", Notice::debug);
+                }
+
+                $configData = array('pushAlertSubscriptionsRootPageID' => $page->id);
+                $this->wire('modules')->saveModuleConfigData($this, $configData);
+
+        */
+        // copy the endpoint template file to site/templates directory
+        $copyFrom = dirname(__FILE__) . '/templates/';  // source of the template files to copy over [this is 'PushAlert/templates/']
+        $copyTo = wire('config')->paths->templates;// destination: '/site/templates/'
+
+        if(!is_file($copyTo . "pushalert_endpoint.php"))
+            $this->wire('files')->copy($copyFrom, $copyTo);
+    }
 
     /**
      *

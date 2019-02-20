@@ -4,15 +4,7 @@ class InputfieldPushAlert extends Inputfield  implements InputfieldHasArrayValue
 
     const PA = 'pushalert';
 
-    public static function getModuleInfo() {
-        return array(
-            'title' => 'PushAlert for ProcessWire',
-            'version' => '0.0.2',
-            'summary' => 'Input field for sending and receiving push notifications.',
-            'requires' => array('FieldtypePushAlert')
-        );
-    }
-    protected $page;
+     protected $page;
     protected $field;
 
     public function setPage(Page $page) {

@@ -10,21 +10,6 @@ class FieldtypePushAlert extends Fieldtype {
 
     const PA = 'pushalert';
 
-    /**
-     * @return array
-     */
-    public static function getModuleInfo()
-    {
-        return array(
-            'title' => __("PushAlert Notification"),
-            'version' => "0.0.3",
-            'summary' => __("This module enables you to send and manage push notifications from your ProcessWire website."),
-            'author' => "Clip Magic",
-            'href' => "https://www.clipmagic.com.au",
-            'installs' => array("InputfieldPushAlert")
-        );
-    }
-
     static public function getDefaultFields() {
 
         return array(
