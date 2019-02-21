@@ -150,3 +150,5 @@ The PushAlert sw.js registers a service worker. Only one service worker may be r
 Check at [https://caniuse.com/#feat=push-api]() for current browser support. The most notable is lack of support for Apple iOS devices due to Apple's poor support of service workers in general.
 
 Notifications on MAC OSX in Chrome and Firefox work, but do not in Safari.
+
+PushAlert offer a solution for Apple devices however that is well outside the scope of this module.
