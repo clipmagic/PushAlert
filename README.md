@@ -115,6 +115,7 @@ if ($customers->count) {
 
 ###Request parameters
 
+
 Parameter   |Type   |Description
 ---|---|---
 title|string|**REQUIRED** This is the title of the notification. It's maximum length is restricted to 64 characters.
