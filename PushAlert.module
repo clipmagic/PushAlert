@@ -152,17 +152,18 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         $widget = (object) $this->getFieldData($page, $widgetFld);
 
         if (empty($widget)) return;
+        $config = $this->wire('config');
 
-        // Ensure all the other PushAlert fields and their correct names exist on the template and aren't empty on the page
+        // Ensure all the other PushAlert fields and their correct names exist on the template and aren't empty
         $paTitle     = $widget->pa_message_title;
         $paMessage   = $widget->pa_message_body;
         $paUrl       = $widget->pa_message_url;
-        if (empty($paUrl))
-            $paUrl = $page->httpUrl;
+        if (empty($paUrl) || stripos($paUrl, '/page/edit/') !== false) {
+            $paUrl= substr($config->urls->httpRoot, 0, -1) . $page->path;
+        }
         $paIcon      = $widget->pa_icon;
         if (empty($paIcon)) {
-            $config = $this->wire('config');
-            $httpsRoot =  'https://' . $config->httpHost;
+            $httpsRoot =  $config->urls->httpRoot;
             $image     =  $config->urls->siteModules . $this->className() . '/images/processwire-pink-p-192sq.png';
                 $paIcon = $httpsRoot . $image;
         }
