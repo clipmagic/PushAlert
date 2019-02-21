@@ -75,43 +75,48 @@ Read the PushAlert REST API documentation!
 Example code for sending a notification from within a ProcessWire page template:
 
 ```
-    <?php namespace ProcessWire;
-    
-    	$pushAlert = $modules->get('PushAlert');
-    	
-    	$options = array (
-            'title' => 'This is the title text',
-            'message' => 'This is the message body text',
-            'icon' => 'https://www.website.com/images/my-icon.png'
-		);
-		
-		$message = $pushalert->send($options);
-	?>      
+/*
+ * Firstly, limit use to only those with the correct credentials to prevent the alert being sent every time
+ * a site visitor hits the page
+ */
+if ($user->isLoggedin() && ($user->isSuperuser() || $user->hasPermission('pushalert'))) {
+    $pushAlert = $modules->get('PushAlert');
+    $options = array(
+        'title' => 'This is the title text',
+        'message' => 'This is the message body text',
+        'icon' => 'https://www.clipmagic.com.au/site/assets/files/1/clip_magic_logo_web_colours294x200.0x100.0x100.png',
+    );
+    $message = $pushAlert->send($options);
+}     
             
 ```
-View the page on the frontend to trigger the PushAlert send feature and **MOST IMPORTANTLY** then comment out the code in your page template. Otherwise, everytime a visitor hits your page the notification will go out again!
+*View the page on the frontend to trigger the PushAlert send feature AND **MOST IMPORTANTLY** then comment out the code in your page template. Otherwise, everytime a visitor hits your page the notification will go out again!*
 
 A more complex example - sending to subscribed users who have a specific role:
 
 ```
-// Send an alert to all users with the role 'customer' who have subscribed to notifications while logged-in
-
-$pushAlert = $modules->get('PushAlert');
-$customers = $users->find('roles=customer');
-if ($customers->count) {
-    $subscribers = $pages->get("name=pushalert-endpoint")->children("pushalert_user_id=".$customers);
-    if ($subscribers->count) {
-        $subscriberIds = $subscribers->each('title'); // array
-        $subscriberJson = json_encode($subscriberIds);
-        $options = array (
-        	'title' => 'Customer role only',
-        	'message' => 'Well, customer role for now',
-        	'subscribers' => $subscriberJson
-        );
-        $message = $pushAlert->send($options);
+/*
+ * Send an alert to all users with the role 'customer' who have subscribed to notifications while logged-in
+ * Firstly, limit use to only those with the correct credentials to prevent the alert being sent every time
+ * a site visitor hits the page
+ */
+if ($user->isLoggedin() && ($user->isSuperuser() || $user->hasPermission('pushalert'))) {
+    $pushAlert = $modules->get('PushAlert');
+    $customers = $users->find('roles=customer');
+    if ($customers->count) {
+        $subscribers = $pages->get("name=pushalert-endpoint")->children("pushalert_user_id=" . $customers);
+        if ($subscribers->count) {
+            $subscriberIds = $subscribers->each('title'); // array
+            $subscriberJson = json_encode($subscriberIds);
+            $options = array(
+                'title' => 'Customer role only',
+                'message' => 'Well, customer role for now',
+                'subscribers' => $subscriberJson
+            );
+            $message = $pushAlert->send($options);
+        }
     }
-}
-```
+}```
 
 ### Request parameters
 
