@@ -31,12 +31,14 @@ class PushAlert extends WireData implements Module, ConfigurableModule
      *
      */
     protected $data = array(
-        'message_title',
-        'message_body',
-        'message_url',
-        'send_on_publish',
-        'message_id',
-        'result_json'
+        'pa_message_title',
+        'pa_message_body',
+        'pa_message_url',
+        'pa_icon',
+        'pa_schedule',
+        'pa_send_on_publish',
+        'pa_message_id',
+        'pa_result_json'
     );
 
     /**
@@ -62,14 +64,21 @@ class PushAlert extends WireData implements Module, ConfigurableModule
 
             $paFields = array();
             foreach ($paFieldTypeConfig as $key => $value) {
-                $paFields[$value] = $input->post[$value];
+                if ($value == 'pa_schedule') {
+                    $paFields["pa_schedule"] = \strtotime($input->post['pa_schedule']);
+                } else {
+                    $paFields[$value] = $input->post[$value];
+                }
             }
+
             $input->post[$pageField->name] = json_encode($paFields);
 
             // remove unnecessary input data to prevent database errors
             unset($input->post['pa_message_title']);
             unset($input->post['pa_message_body']);
             unset($input->post['pa_message_url']);
+            unset($input->post['pa_icon']);
+            unset($input->post['pa_schedule']);
             unset($input->post['pa_message_id']);
             unset($input->post['pa_send_on_publish']);
             unset($input->post['pa_result_json']);
@@ -112,7 +121,7 @@ class PushAlert extends WireData implements Module, ConfigurableModule
                     g.src = "https://cdn.pushalert.co/integrate_'.$this->web_id.'.js";
                     s.parentNode.insertBefore(g, s);
                 }(document, "script"));
-                (pushalertbyiw = window.pushalertbyiw || []).push(["onSuccess", callbackOnSuccess])
+                (pushalertbyiw = window.pushalertbyiw || []).push(["onSuccess", callbackOnSuccess]);
             </script>
             <!-- End PushAlert -->
 		';
@@ -150,8 +159,16 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         $paUrl       = $widget->pa_message_url;
         if (empty($paUrl))
             $paUrl = $page->httpUrl;
-        $paSend      = (int) $widget->pa_send_on_publish;
+        $paIcon      = $widget->pa_icon;
+        if (empty($paIcon)) {
+            $config = $this->wire('config');
+            $httpsRoot =  'https://' . $config->httpHost;
+            $image     =  $config->urls->siteModules . $this->className() . '/images/processwire-pink-p-192sq.png';
+                $paIcon = $httpsRoot . $image;
+        }
 
+        $pa_schedule = $widget->pa_schedule;
+        $paSend      = (int) $widget->pa_send_on_publish;
 
         // Hrmmm, may remove this field after sending to prevent spamming?
         if ($paSend != 1) return; // json decoded has it as a string so cast as int
@@ -168,9 +185,11 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         // SANITY CHECKS COMPLETE, now do stuff...
 
         $options = array(
-            'title'   => $paTitle,
-            'message' => $paMessage,
-            'url'     => $paUrl
+            'title'         => $paTitle,
+            'message'       => $paMessage,
+            'url'           => $paUrl,
+            'icon'          => $paIcon,
+            'schedule_time' => $pa_schedule
         );
 
         $result = $this->send($options);
@@ -288,7 +307,8 @@ class PushAlert extends WireData implements Module, ConfigurableModule
             'pa_message_title',
             'pa_message_body',
             'pa_message_url',
-            'pa_message_id',
+            'pa_icon',
+            'pa_schedule',
             'pa_send_on_publish',
             'pa_message_id',
          */
@@ -297,6 +317,12 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         $data->pa_message_body    = $sanitizer->text($data->pa_message_body);
         if (!empty($data->pa_message_url))
             $data->pa_message_url     = $sanitizer->url($data->pa_message_url);
+        if (!empty($data->pa_icon))
+            $data->pa_icon     = $sanitizer->url($data->pa_icon);
+        if (!empty($data->pa_schedule))
+            $data->pa_schedule      = $sanitizer->date($data->pa_schedule);
+
+
         $data->pa_message_id      = $sanitizer->text($data->pa_message_id);
         $data->pa_send_on_publish = $sanitizer->int($data->pa_send_on_publish);
 
@@ -366,6 +392,7 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         );
         $otherOptions = array(
             'icon',
+            'schedule_time',
             'large_image',
             'action1',
             'action2',
@@ -391,7 +418,12 @@ class PushAlert extends WireData implements Module, ConfigurableModule
 
                 switch ($option) {
                     case 'url':
+                    case 'icon':
                         $options[$option] = $sanitizer->url($v); // sanitize as URL
+                        break;
+
+                    case 'schedule_time':
+                        $options[$option] = $sanitizer->date($v);
                         break;
 
                     case 'audio':
@@ -646,25 +678,7 @@ class PushAlert extends WireData implements Module, ConfigurableModule
             $t->noAppendTemplateFile = 1; // dont append template file
             $t->save();
         }
-        /*        $adminRoot = $pages->get("name=pushalert-endpoint");
-        //        $page = $adminRoot->child("name=pushalert_subscriptions, template=pushalert_subscriptions, include=all");
 
-                if(!$page->id) {
-                    $page = $pages->newPage(array('template' => 'pushalert_subscription'));
-                    $page->parent = $adminRoot;
-                    $page->status = Page::statusHidden | Page::statusLocked | Page::statusSystemID;
-                    $page->name = 'pushalert_subscriptions';
-                    $page->name = 'pushalert_subscriptions';
-                    $page->title = 'PushAlert Subscriptions';
-                    $page->sort = $adminRoot->numChildren;
-                    $page->save();
-                    $this->message("Added page {$page->path}", Notice::debug);
-                }
-
-                $configData = array('pushAlertSubscriptionsRootPageID' => $page->id);
-                $this->wire('modules')->saveModuleConfigData($this, $configData);
-
-        */
         // copy the endpoint template file to site/templates directory
         $copyFrom = dirname(__FILE__) . '/templates/';  // source of the template files to copy over [this is 'PushAlert/templates/']
         $copyTo = wire('config')->paths->templates;// destination: '/site/templates/'
@@ -723,26 +737,10 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         if($this->className() != 'PushAlert') return;
         $page = $pages->get("name=pushalert-endpoint");
         if($page->id) {
-//            $page->addStatus(Page::statusSystemOverride);
-//            $page->removeStatus(Page::statusSystem);
-//            $page->removeStatus(Page::statusSystemID);
-//            $page->removeStatus(Page::statusSystemOverride);
-//            $page->removeStatus(Page::statusLocked);
             $pages->delete($page, true);
             $this->message("Removed page {$page->path}", Notice::debug);
         }
-/*
-        // Delete the frontend API endpoint page
-        $endPointPage = $pages->get("name=pushalert-endpoint");
-        if($endPointPage->id) {
-            $page->addStatus(Page::statusSystemOverride);
-//            $page->removeStatus(Page::statusLocked);
-            $page->removeStatus(Page::statusHidden);
 
-            $pages->delete($endPointPage, true);
-            $this->message("Removed page {$endPointPage->path}", Notice::debug);
-        }
-*/
         // Delete the templates
         $templates = $this->wire('templates');
 
@@ -789,6 +787,5 @@ class PushAlert extends WireData implements Module, ConfigurableModule
         if (is_file($templatePath))
             $this->wire('files')->unlink($templatePath);
     }
-
 
 }

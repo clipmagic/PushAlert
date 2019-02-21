@@ -16,21 +16,19 @@ if (empty($json_str)) return;
 $json_obj = json_decode($json_str);
 
 $paMod = $modules->get("PushAlert");
-//$parentPage = $pages->get($paMod->pushAlertSubscriptionsRootPageID);
 
 $subscribers = $page->children("title=$json_obj->subscriber_id");
 if ($subscribers->count > 0)
     return;
 
-$p = new Page();
-$p->of(false);
-$p->template = 'pushalert_subscription';
-$p->parent   = $page->id;
-$p->title    = $json_obj->subscriber_id;
+// only save subscription ids for logged in users
 if ($user->isLoggedin()) {
+    $p = new Page();
+    $p->of(false);
+    $p->template = 'pushalert_subscription';
+    $p->parent   = $page->id;
+    $p->title    = $json_obj->subscriber_id;
     $p->pushalert_user_id = $user->id;
+    $p->save();
 }
-$p->save();
-
-
 http_response_code(200); // PHP 5.4 or greater

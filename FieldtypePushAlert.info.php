@@ -7,7 +7,7 @@
  */
 
 $info = array(
-    'title' => __("PushAlert Notification"),
+    'title' => __("FieldtypePushAlert"),
     'version' => "0.0.3",
     'summary' => __("This module enables you to send and manage push notifications from your ProcessWire website."),
     'author' => "Clip Magic",

@@ -16,7 +16,9 @@ class FieldtypePushAlert extends Fieldtype {
             'pa_message_title',
             'pa_message_body',
             'pa_message_url',
+            'pa_icon',
             'pa_message_id',
+            'pa_schedule',
             'pa_send_on_publish',
             'pa_message_id',
             'pa_result_json'

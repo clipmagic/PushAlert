@@ -15,6 +15,7 @@ $info = array(
     'summary' => __("This module enables you to send and manage push notifications from your ProcessWire 3.0.74+ website."),
     'author' => "Clip Magic",
     'href' => "https://www.clipmagic.com.au",
+    'icon' => "bell",
     'requires' => array("PHP>=5.6.0", "ProcessWire>=3.0.74"),
     'installs' => array("FieldtypePushAlert"),
     'autoload' => true,

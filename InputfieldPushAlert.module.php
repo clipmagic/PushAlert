@@ -103,13 +103,40 @@ class InputfieldPushAlert extends Inputfield  implements InputfieldHasArrayValue
         }
         $wrapper->append($inputfield);
 
-        // Message urlinput field
-        $inputfield = $this->wire(new InputfieldURL);
+        // Message url input field
+        $inputfield = $this->wire(new InputfieldHidden);
         $inputfield->set('name', 'pa_message_url');
         $inputfield->set('label', _('Message URL'));
         $inputfield->set('noRelative', true);
         if (!empty($vals) && isset($vals->pa_message_url)) {
             $inputfield->set('value', $vals->pa_message_url);
+        } else {
+            $page = $this->wire('page');
+            $inputfield->set('value', $page->httpUrl);
+        }
+        $wrapper->append($inputfield);
+
+        // Message url input field
+        $inputfield = $this->wire(new InputfieldURL);
+        $inputfield->set('name', 'pa_icon');
+        $inputfield->set('label', _('URL to Icon - 192x192'));
+        $inputfield->set('noRelative', true);
+        if (!empty($vals) && isset($vals->pa_icon)) {
+            $inputfield->set('value', $vals->pa_icon);
+        }
+        $wrapper->append($inputfield);
+
+        // Schedle send input field
+        $inputfield = $this->wire(new InputfieldDatetime);
+        $inputfield->set('name', 'pa_schedule');
+        $inputfield->set('label', _('Schedule send time'));
+        $inputfield->set('dateInputFormat', InputfieldDatetime::defaultDateInputFormat);
+        $inputfield->set('datepicker', 3);
+        $inputfield->set('timeInputFormat', 'H:m:s');
+        $inputfield->set('timeInputSelect', 1);
+
+        if (!empty($vals) && isset($vals->pa_schedule)) {
+            $inputfield->set('value', $vals->pa_schedule);
         }
         $wrapper->append($inputfield);
 
