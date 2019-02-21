@@ -132,7 +132,7 @@ class InputfieldPushAlert extends Inputfield  implements InputfieldHasArrayValue
         $inputfield->set('label', _('Schedule send time'));
         $inputfield->set('dateInputFormat', InputfieldDatetime::defaultDateInputFormat);
         $inputfield->set('datepicker', 3);
-        $inputfield->set('timeInputFormat', 'H:m:s');
+        $inputfield->set('timeInputFormat', 'H:i:s');
         $inputfield->set('timeInputSelect', 1);
 
         if (!empty($vals) && isset($vals->pa_schedule)) {
