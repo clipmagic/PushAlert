@@ -138,7 +138,7 @@ schedule_time|unix timestamp|**OPTIONAL** Define the time when you want the noti
 *Please note: some features only available to PushAlert Premium & Platinum accounts.*
 
 ## Important
-###M anifest.json
+### Manifest.json
 Each webpage may only have one manifest.json file. The PushAlert manifest.json contains your site's GCM Sender ID. Should your site already contain a manifest.json file, copy/paste this line from PushAlert's into your original file:
 ```
 "gcm_sender_id": "999999999999",
