@@ -89,7 +89,7 @@ Example code for sending a notification from within a ProcessWire page template:
 	?>      
             
 ```
-* View the page on the frontend to trigger the PushAlert send feature AND **MOST IMPORTANTLY** then comment out the code in your page template. Otherwise, everytime a visitor hits your page the notification will go out again!
+*View the page on the frontend to trigger the PushAlert send feature AND **MOST IMPORTANTLY** then comment out the code in your page template. Otherwise, everytime a visitor hits your page the notification will go out again!*
 
 A more complex example - sending to subscribed users who have a specific role:
 
