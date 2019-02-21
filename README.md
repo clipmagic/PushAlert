@@ -137,17 +137,16 @@ schedule_time|unix timestamp|**OPTIONAL** Define the time when you want the noti
 
 *Please note: some features only available to PushAlert Premium & Platinum accounts.*
 
-##Important
-###Manifest.json
+## Important
+###M anifest.json
 Each webpage may only have one manifest.json file. The PushAlert manifest.json contains your site's GCM Sender ID. Should your site already contain a manifest.json file, copy/paste this line from PushAlert's into your original file:
 ```
 "gcm_sender_id": "999999999999",
 ```
 
-###Service Worker
+### Service Worker
 The PushAlert sw.js registers a service worker. Only one service worker may be registered per site and will cause problems if you register another. Contact PushAlert technical support for assistance.
-###Web browser push notification support
+### Web browser push notification support
 Check at [https://caniuse.com/#feat=push-api]() for current browser support. The most notable is lack of support for Apple iOS devices due to Apple's poor support of service workers in general.
 
 Notifications on MAC OSX in Chrome and Firefox work, but do not in Safari.
-
