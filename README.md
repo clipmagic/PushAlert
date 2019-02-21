@@ -91,7 +91,7 @@ if ($user->isLoggedin() && ($user->isSuperuser() || $user->hasPermission('pushal
             
 ```
 
-*View the page on the frontend to trigger the PushAlert send feature *
+*View the page on the frontend to trigger the PushAlert send feature*
 
 A more complex example - sending to subscribed users who have a specific role:
 
