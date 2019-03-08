@@ -207,7 +207,7 @@ class PushAlert extends WireData implements Module, ConfigurableModule
 
                 $this->message(_("Notification sent with ID: $resultObj->id"));
             } else {
-                $this->error(_("There was a problem sending the notification"));
+                $this->error(_("There was a problem sending the notification: ". $resultObj->msg));
             }
             if ($dbUpdate === false) { // problem updating db
                 $this->error(_("There was a problem updating the database"));
