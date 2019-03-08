@@ -490,9 +490,10 @@ class PushAlert extends WireData implements Module, ConfigurableModule
 
     public function _getHttp ($slug, $options = array()) {
         $http = new WireHttp();
-        $headers = Array();
-        $headers[] = "Authorization: api_key=". $this->api_key;
-        $http->setHeaders( $headers);
+       // $headers = Array();
+       // $headers[] = "Authorization: api_key=". $this->api_key;
+      //  $http->setHeaders( $headers);
+	$http->setHeader("Authorization", "api_key=". $this->api_key);
         $result = $http->get($this->api_url . $slug, $options);
         return $result;
 
